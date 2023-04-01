@@ -1,4 +1,4 @@
-use std::{net::TcpListener};
+use std::net::TcpListener;
 
 // `tokio::test` is the testing equivalent of `tokio::main`.
 // It also spares you from having to specify the `#[test]` attribute.
@@ -34,4 +34,3 @@ fn spawn_app() -> String {
 
     format!("http://127.0.0.1:{}", port)
 }
-
