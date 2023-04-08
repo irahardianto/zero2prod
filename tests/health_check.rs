@@ -1,6 +1,5 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Pool, Postgres};
 use std::net::TcpListener;
-use zero2prod::configurations::get_configuration;
 use zero2prod::startup::run;
 
 pub struct TestApp {
@@ -8,35 +7,30 @@ pub struct TestApp {
     pub db_pool: PgPool,
 }
 // Launch our application in the background
-async fn spawn_app() -> TestApp {
+async fn spawn_app(pool: Pool<Postgres>) -> TestApp {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-
     let address = format!("http://127.0.0.1:{}", port);
-    let configuration = get_configuration().expect("Failed to read configuration.");
-    let connection_pool = PgPool::connect(&configuration.database.connection_string())
-        .await
-        .expect("Failed to connect to Postgres.");
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
+    let server = run(listener, pool.clone()).expect("Failed to bind address");
 
     let _ = tokio::spawn(server);
 
     TestApp {
         address,
-        db_pool: connection_pool,
+        db_pool: pool,
     }
 }
 
-// `tokio::test` is the testing equivalent of `tokio::main`.
-// It also spares you from having to specify the `#[test]` attribute.
-//
+// sqlx::test is used to replace tokio::test,it will automatically create the database, run migrations,
+// and delete the database when the test is complete
+
 // You can inspect what code gets generated using
 // `cargo expand --test health_check` (<- name of the test file)
-#[tokio::test]
-async fn health_check_works() {
+#[sqlx::test]
+async fn health_check_works(pool: Pool<Postgres>) {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(pool).await;
     let client = reqwest::Client::new();
 
     // Act
@@ -51,10 +45,10 @@ async fn health_check_works() {
     assert_eq!(Some(0), response.content_length());
 }
 
-#[tokio::test]
-async fn subscribe_returns_a_200_for_valid_form_data() {
+#[sqlx::test]
+async fn subscribe_returns_a_200_for_valid_form_data(pool: Pool<Postgres>) {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(pool).await;
 
     let client = reqwest::Client::new();
 
@@ -80,10 +74,10 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     assert_eq!(saved.name, "le guin");
 }
 
-#[tokio::test]
-async fn subscribe_returns_a_400_when_data_is_missing() {
+#[sqlx::test]
+async fn subscribe_returns_a_400_when_data_is_missing(pool: Pool<Postgres>) {
     // Arrange
-    let app = spawn_app().await;
+    let app = spawn_app(pool).await;
     let client = reqwest::Client::new();
     let test_cases = vec![
         ("name=le%20guin", "missing the email"),
